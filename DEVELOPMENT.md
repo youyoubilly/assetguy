@@ -2,14 +2,23 @@
 
 ## Philosophy
 
-AssetGuy is a **policy + orchestration layer** for asset optimization. It does not reinvent low-level tools but instead:
+AssetGuy is a **practical asset-toolkit** designed to help improve effectiveness when editing documentation, creating content, and managing project assets. It's a policy + orchestration layer for asset optimization that does not reinvent low-level tools but instead:
 
 - Integrates best-in-class existing tools (ImageMagick, FFmpeg, Pillow)
 - Applies opinionated but overridable defaults
-- Standardizes workflows developers repeatedly struggle with
+- Standardizes workflows that developers, docs writers, open-source maintainers, and product makers repeatedly struggle with
 - Provides clarity over raw power
 
-> Think "Prettier / ESLint for assets", not "FFmpeg replacement".
+### Target Audience
+
+AssetGuy is built for:
+
+- **Developers** - Optimize assets for documentation, README files, and project repositories
+- **Docs writers** - Streamline image and GIF optimization for technical documentation
+- **Open-source maintainers** - Efficiently manage assets across multiple repositories
+- **Product makers** - Optimize assets for web, marketing materials, and product documentation
+
+> Think "Prettier / ESLint for assets", not "FFmpeg replacement". Focus on improving effectiveness, not reinventing tools.
 
 ### Core Principles
 
@@ -17,6 +26,7 @@ AssetGuy is a **policy + orchestration layer** for asset optimization. It does n
 2. **Flexible but guided** - Good defaults and presets, with override capability
 3. **Assets, not formats** - Treat static images, animated images, and videos as assets in a pipeline
 4. **Clarity over completeness** - Prefer defaults over configuration, wrapping tools over reimplementing
+5. **Improve effectiveness** - Help users focus on content creation, not tool wrestling
 
 ## Architecture
 

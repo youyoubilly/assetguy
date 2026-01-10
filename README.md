@@ -1,6 +1,17 @@
 # AssetGuy
 
-Unified CLI tool for optimizing, converting, and managing image, GIF, and video assets.
+A practical asset-toolkit to help improve effectiveness when editing documentation, creating content, and managing project assets. Unified CLI tool for optimizing, converting, and managing image, GIF, and video assets.
+
+## Who is AssetGuy for?
+
+AssetGuy is designed for:
+
+- **Developers** - Quickly optimize assets for documentation, README files, and project assets
+- **Docs writers** - Streamline image and GIF optimization for technical documentation
+- **Open-source maintainers** - Efficiently manage assets across repositories and documentation
+- **Product makers** - Optimize assets for web, marketing materials, and product documentation
+
+Whether you're writing technical docs, maintaining open-source projects, or creating product content, AssetGuy helps you focus on content creation rather than wrestling with asset optimization tools.
 
 ## Installation
 
@@ -127,7 +138,9 @@ MIT License
 
 ## Philosophy
 
-AssetGuy is a **policy + orchestration layer** that integrates best-in-class tools (ImageMagick, FFmpeg, Pillow) with opinionated defaults. It standardizes asset workflows without reinventing low-level media processing.
+AssetGuy is a **practical asset-toolkit** that helps developers, docs writers, open-source maintainers, and product makers improve their effectiveness when working with assets. It's a policy + orchestration layer that integrates best-in-class tools (ImageMagick, FFmpeg, Pillow) with opinionated defaults, standardizing asset workflows without reinventing low-level media processing.
+
+**Focus on what matters:** Spend less time optimizing assets and more time creating great content.
 
 ## Links
 
