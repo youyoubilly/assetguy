@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "assetguy"
+version = "0.1.0"
+description = "Unified CLI tool for optimizing, converting, and managing image, GIF, and video assets"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
+authors = [
+    {name = "Billy Wang", email = "billy@techxartisan.com"}
+]
+keywords = ["images", "gif", "video", "optimization", "assets", "conversion"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pillow>=9.0.0",
+    "click>=7.0",
+    "pyyaml>=5.4.0",
+]
+
+[project.optional-dependencies]
+video = ["video-keyframes>=0.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/youyoubilly/assetguy"
+Repository = "https://github.com/youyoubilly/assetguy"
+Issues = "https://github.com/youyoubilly/assetguy/issues"
+
+[project.scripts]
+assetguy = "assetguy.cli:main"
