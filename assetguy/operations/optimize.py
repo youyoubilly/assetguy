@@ -3,12 +3,13 @@
 import os
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 from ..assets.gif import GifAsset
+from ..assets.image import ImageAsset
 from ..tools.detector import get_imagemagick_command
 from ..tools.executor import run
-from ..utils.formatting import filesize_mb
+from ..utils.formatting import filesize_mb, format_file_size
 
 
 def split_gif(
@@ -160,3 +161,254 @@ def split_gif(
         print(f"   ✓ Created segment {i+1}: {output_filename} ({start_time:.2f}-{end_time:.2f}s, {segment_duration:.2f}s)")
     
     return output_files
+
+
+def generate_output_filename(input_path: Path, suffix: str = "_optimized") -> Path:
+    """Generate output filename for optimized asset.
+    
+    Args:
+        input_path: Path to input file
+        suffix: Suffix to add before extension (default: "_optimized")
+        
+    Returns:
+        Path to output file
+    """
+    stem = input_path.stem
+    ext = input_path.suffix
+    return input_path.parent / f"{stem}{suffix}{ext}"
+
+
+def format_optimization_result(
+    input_path: Path,
+    output_path: Path,
+    input_size: int,
+    output_size: int
+) -> Dict[str, Any]:
+    """Format optimization result with file size comparison.
+    
+    Args:
+        input_path: Path to input file
+        output_path: Path to output file
+        input_size: Input file size in bytes
+        output_size: Output file size in bytes
+        
+    Returns:
+        Dictionary with optimization results
+    """
+    reduction = input_size - output_size
+    reduction_percent = (reduction / input_size * 100) if input_size > 0 else 0
+    
+    return {
+        'input_path': str(input_path),
+        'output_path': str(output_path),
+        'input_size': input_size,
+        'input_size_formatted': format_file_size(input_size),
+        'output_size': output_size,
+        'output_size_formatted': format_file_size(output_size),
+        'reduction': reduction,
+        'reduction_formatted': format_file_size(reduction),
+        'reduction_percent': reduction_percent
+    }
+
+
+def print_optimization_result(result: Dict[str, Any]):
+    """Print formatted optimization result.
+    
+    Args:
+        result: Result dictionary from format_optimization_result()
+    """
+    print("\n" + "=" * 60)
+    print("✅ Optimization Complete")
+    print("=" * 60)
+    print(f"Input:  {result['input_path']}")
+    print(f"        {result['input_size_formatted']} ({result['input_size']:,} bytes)")
+    print(f"Output: {result['output_path']}")
+    print(f"        {result['output_size_formatted']} ({result['output_size']:,} bytes)")
+    print(f"\nReduction: {result['reduction_formatted']} ({result['reduction_percent']:.1f}%)")
+    print("=" * 60 + "\n")
+
+
+def optimize_gif(
+    gif_asset: GifAsset,
+    output_path: Optional[Path] = None,
+    width: Optional[int] = None,
+    fps: Optional[float] = None,
+    fps_mode: str = "normalize",
+    colors: Optional[int] = None
+) -> Dict[str, Any]:
+    """Optimize a GIF file with resize, FPS adjustment, and color reduction.
+    
+    Args:
+        gif_asset: GifAsset instance
+        output_path: Optional output path (default: generate from input)
+        width: Optional target width in pixels
+        fps: Optional target FPS
+        fps_mode: "normalize" (equal delays) or "preserve" (scale delays)
+        colors: Optional number of colors for optimization
+        
+    Returns:
+        Dictionary with optimization results (from format_optimization_result)
+        
+    Raises:
+        RuntimeError: If ImageMagick not found
+        ValueError: If GIF info cannot be read
+    """
+    magick_cmd = get_imagemagick_command()
+    if not magick_cmd:
+        raise RuntimeError("ImageMagick not found. Please install ImageMagick first.")
+    
+    info = gif_asset.get_info()
+    if not info:
+        raise ValueError("Could not read GIF information")
+    
+    input_path = gif_asset.path
+    input_size = gif_asset.size_bytes
+    
+    # Generate output path if not provided
+    if output_path is None:
+        output_path = generate_output_filename(input_path)
+    
+    # Use temp file for processing
+    temp_fd, temp_file = tempfile.mkstemp(suffix='.gif', prefix='gif_optimize_')
+    os.close(temp_fd)
+    
+    try:
+        # Build optimization command
+        opt_cmd = [magick_cmd, str(input_path)]
+        
+        # Coalesce frames before any modifications
+        opt_cmd += ["-coalesce"]
+        
+        # Add resize if specified
+        if width:
+            opt_cmd += ["-resize", f"{width}x"]
+        
+        # Add FPS adjustment if specified
+        if fps:
+            if fps_mode == "preserve":
+                # Get original delays and scale proportionally
+                delays = info.get('delays', [])
+                if delays:
+                    scaled_delays = gif_asset.scale_delays_proportionally(delays, fps)
+                    # Use average of scaled delays
+                    avg_scaled_delay = int(sum(scaled_delays) / len(scaled_delays))
+                    opt_cmd += ["-set", "delay", str(avg_scaled_delay)]
+                else:
+                    delay = int(100 / fps)
+                    opt_cmd += ["-set", "delay", str(delay)]
+            else:
+                # Normalize mode: equal delays for all frames
+                delay = int(100 / fps)
+                opt_cmd += ["-set", "delay", str(delay)]
+        
+        # Add color reduction if specified
+        if colors:
+            opt_cmd += ["-colors", str(colors)]
+        
+        # Add optimization and output to temp file
+        opt_cmd += ["-layers", "Optimize", temp_file]
+        
+        # Run optimization
+        run(opt_cmd)
+        
+        # Move temp file to output path
+        if os.path.exists(temp_file):
+            os.rename(temp_file, output_path)
+        else:
+            raise RuntimeError("Optimization failed: output file not created")
+        
+        # Get output file size
+        output_size = output_path.stat().st_size
+        
+        # Format and return result
+        result = format_optimization_result(input_path, output_path, input_size, output_size)
+        return result
+        
+    except Exception as e:
+        # Clean up temp file on error
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        raise
+
+
+def optimize_image(
+    image_asset: ImageAsset,
+    output_path: Optional[Path] = None,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+    scale: Optional[float] = None
+) -> Dict[str, Any]:
+    """Optimize an image file with proportional resizing.
+    
+    Args:
+        image_asset: ImageAsset instance
+        output_path: Optional output path (default: generate from input)
+        width: Optional target width in pixels
+        height: Optional target height in pixels
+        scale: Optional scale factor (e.g., 0.5 for 50%)
+        
+    Returns:
+        Dictionary with optimization results (from format_optimization_result)
+        
+    Raises:
+        ValueError: If no resize parameter provided or image cannot be read
+    """
+    from PIL import Image
+    
+    input_path = image_asset.path
+    input_size = image_asset.size_bytes
+    
+    # Validate that at least one resize parameter is provided
+    if not any([width, height, scale]):
+        raise ValueError("At least one resize parameter (width, height, or scale) must be provided")
+    
+    # Generate output path if not provided
+    if output_path is None:
+        output_path = generate_output_filename(input_path)
+    
+    try:
+        with Image.open(input_path) as img:
+            original_width, original_height = img.size
+            
+            # Calculate new dimensions
+            if scale:
+                new_width = int(original_width * scale)
+                new_height = int(original_height * scale)
+            elif width:
+                scale_factor = width / original_width
+                new_width = width
+                new_height = int(original_height * scale_factor)
+            elif height:
+                scale_factor = height / original_height
+                new_width = int(original_width * scale_factor)
+                new_height = height
+            else:
+                raise ValueError("No resize parameter provided")
+            
+            # Resize with high-quality resampling
+            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # Save with appropriate quality settings
+            # Preserve original format and optimize where possible
+            save_kwargs = {}
+            if img.format == 'JPEG':
+                save_kwargs['quality'] = 85
+                save_kwargs['optimize'] = True
+            elif img.format == 'PNG':
+                save_kwargs['optimize'] = True
+            elif img.format == 'WEBP':
+                save_kwargs['quality'] = 85
+                save_kwargs['method'] = 6
+            
+            # Save to output path
+            resized_img.save(output_path, **save_kwargs)
+        
+        # Get output file size
+        output_size = output_path.stat().st_size
+        
+        # Format and return result
+        result = format_optimization_result(input_path, output_path, input_size, output_size)
+        return result
+        
+    except Exception as e:
+        raise ValueError(f"Error optimizing image: {e}")

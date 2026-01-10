@@ -54,6 +54,7 @@ Thumbs.db
 
 # Project specific
 old-scripts/
+test-files/
 
 # Logs
 *.log

@@ -5,8 +5,11 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from .operations.inspect import inspect_asset, print_inspection
+from .operations.inspect import inspect_asset, print_inspection, detect_asset_type
 from .operations.compare import compare_assets, print_comparison
+from .operations.optimize import optimize_gif, optimize_image, print_optimization_result, generate_output_filename
+from .assets.gif import GifAsset
+from .assets.image import ImageAsset
 from .config.manager import ConfigManager
 from .config.presets import get_preset, list_presets
 from .utils.paths import strip_quotes
@@ -73,27 +76,149 @@ def compare(file1: str, file2: str, json: bool):
 @click.option("--width", type=int, help="Target width in pixels")
 @click.option("--fps", type=float, help="Target FPS (for GIFs)")
 @click.option("--colors", type=int, help="Number of colors (for GIFs)")
+@click.option("--output", "-o", type=click.Path(), help="Output file path")
+@click.option("--overwrite", is_flag=True, help="Overwrite output file if it exists (non-interactive mode)")
 @click.option("--non-interactive", is_flag=True, help="Run in non-interactive mode")
+@click.option("--json", is_flag=True, help="Output result in JSON format")
 def optimize(file_path: str, preset: Optional[str], width: Optional[int], 
-             fps: Optional[float], colors: Optional[int], non_interactive: bool):
-    """Optimize an asset file.
+             fps: Optional[float], colors: Optional[int], output: Optional[str],
+             overwrite: bool, non_interactive: bool, json: bool):
+    """Optimize an asset file (GIF or image).
     
     FILE_PATH: Path to the asset file to optimize
     
-    Note: Full optimization features (trimming, splitting) are coming in v0.1.1
+    Supports both GIF and image optimization with presets, interactive prompts,
+    and non-interactive mode for automation.
     """
-    click.echo("⚠️  Optimization command is under development.")
-    click.echo("   Basic optimization will be available in v0.1.1")
-    click.echo(f"   File: {file_path}")
-    
-    if preset:
-        try:
-            preset_config = get_preset(preset)
-            click.echo(f"   Preset: {preset}")
-            click.echo(f"   Preset config: {preset_config}")
-        except KeyError as e:
-            click.echo(f"Error: {e}", err=True)
+    try:
+        path = Path(strip_quotes(file_path))
+        
+        if not path.exists():
+            click.echo(f"Error: File not found: {path}", err=True)
             sys.exit(1)
+        
+        # Detect asset type
+        asset_type = detect_asset_type(path)
+        if asset_type not in ['gif', 'image']:
+            click.echo(f"Error: Unsupported asset type. Supported: GIF and images", err=True)
+            sys.exit(1)
+        
+        # Load preset if provided
+        preset_config = {}
+        if preset:
+            try:
+                preset_config = get_preset(preset)
+            except KeyError as e:
+                click.echo(f"Error: {e}", err=True)
+                sys.exit(1)
+        
+        # Merge preset with CLI flags (CLI flags override preset)
+        opt_width = width if width is not None else preset_config.get('width')
+        opt_fps = fps if fps is not None else preset_config.get('fps')
+        opt_colors = colors if colors is not None else preset_config.get('colors')
+        
+        # Show current asset info
+        if not non_interactive:
+            click.echo("")
+            info = inspect_asset(path)
+            print_inspection(info)
+        
+        # Handle output path
+        output_path = None
+        if output:
+            output_path = Path(strip_quotes(output))
+        else:
+            output_path = generate_output_filename(path)
+        
+        # Check if output file exists
+        if output_path.exists() and not overwrite:
+            if non_interactive:
+                click.echo(f"Error: Output file exists: {output_path}. Use --overwrite to overwrite.", err=True)
+                sys.exit(1)
+            else:
+                if not click.confirm(f"Output file {output_path} already exists. Overwrite?"):
+                    click.echo("Operation cancelled.")
+                    sys.exit(0)
+        
+        # Interactive mode: prompt for missing parameters
+        if not non_interactive:
+            if asset_type == 'gif':
+                if opt_width is None:
+                    width_input = click.prompt("Target width (press Enter to skip)", default="", type=str)
+                    opt_width = int(width_input) if width_input.strip() else None
+                
+                if opt_fps is None:
+                    fps_input = click.prompt("Target FPS (press Enter to skip)", default="", type=str)
+                    opt_fps = float(fps_input) if fps_input.strip() else None
+                
+                if opt_colors is None:
+                    colors_input = click.prompt("Number of colors (press Enter to skip)", default="", type=str)
+                    opt_colors = int(colors_input) if colors_input.strip() else None
+                
+                # Prompt for output filename if not provided
+                if not output:
+                    default_output = str(output_path)
+                    output_input = click.prompt("Output filename", default=default_output, type=str)
+                    output_path = Path(output_input)
+            
+            elif asset_type == 'image':
+                if opt_width is None:
+                    width_input = click.prompt("Target width (press Enter to skip)", default="", type=str)
+                    opt_width = int(width_input) if width_input.strip() else None
+                
+                # Prompt for output filename if not provided
+                if not output:
+                    default_output = str(output_path)
+                    output_input = click.prompt("Output filename", default=default_output, type=str)
+                    output_path = Path(output_input)
+        
+        # Validate that at least one optimization parameter is provided
+        if asset_type == 'gif':
+            if not any([opt_width, opt_fps, opt_colors]):
+                click.echo("Error: At least one optimization parameter (--width, --fps, or --colors) or --preset must be provided.", err=True)
+                sys.exit(1)
+        elif asset_type == 'image':
+            if opt_width is None:
+                click.echo("Error: --width or --preset must be provided for image optimization.", err=True)
+                sys.exit(1)
+        
+        # Perform optimization
+        click.echo("\n🔄 Optimizing asset...")
+        
+        if asset_type == 'gif':
+            gif_asset = GifAsset(path)
+            result = optimize_gif(
+                gif_asset,
+                output_path=output_path,
+                width=opt_width,
+                fps=opt_fps,
+                fps_mode="normalize",
+                colors=opt_colors
+            )
+        elif asset_type == 'image':
+            image_asset = ImageAsset(path)
+            result = optimize_image(
+                image_asset,
+                output_path=output_path,
+                width=opt_width
+            )
+        else:
+            click.echo(f"Error: Unsupported asset type: {asset_type}", err=True)
+            sys.exit(1)
+        
+        # Display results
+        if json:
+            import json
+            click.echo(json.dumps(result, indent=2))
+        else:
+            print_optimization_result(result)
+        
+    except KeyboardInterrupt:
+        click.echo("\nOperation cancelled by user.", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
 
 @cli.group()
