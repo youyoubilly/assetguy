@@ -454,7 +454,25 @@ def split(file_path: str, time_points: Optional[str], frame_points: Optional[str
         gif_asset = GifAsset(path)
         info = gif_asset.get_info()
         if not info:
-            click.echo("Error: Could not read GIF information", err=True)
+            # Check if ImageMagick is available
+            from .tools.detector import get_imagemagick_command
+            magick_cmd = get_imagemagick_command()
+            if not magick_cmd:
+                click.echo(
+                    "Error: Could not read GIF information. ImageMagick is required but not found.\n"
+                    "Please install ImageMagick:\n"
+                    "  macOS: brew install imagemagick\n"
+                    "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
+                    "  Windows: Download from https://imagemagick.org/script/download.php",
+                    err=True
+                )
+            else:
+                click.echo(
+                    f"Error: Could not read GIF information. "
+                    f"ImageMagick command '{magick_cmd}' is available but failed to read the file. "
+                    "The file may be corrupted or in an unsupported format.",
+                    err=True
+                )
             sys.exit(1)
         
         # Show current asset info
@@ -734,6 +752,33 @@ def presets():
             if key != 'description':
                 click.echo(f"    {key}: {value}")
         click.echo("")
+
+
+@cli.command()
+def check():
+    """Check availability of required external tools."""
+    from .tools.detector import check_imagemagick, check_ffmpeg
+    
+    click.echo("Checking external dependencies...")
+    click.echo("")
+    
+    # Check ImageMagick
+    magick_available, magick_version = check_imagemagick()
+    if magick_available:
+        click.echo(f"✓ ImageMagick: {magick_version}")
+    else:
+        click.echo("✗ ImageMagick: Not found")
+        click.echo("  Required for GIF operations")
+        click.echo("  Install: brew install imagemagick (macOS) or sudo apt-get install imagemagick (Linux)")
+    
+    # Check FFmpeg
+    ffmpeg_available, ffmpeg_version = check_ffmpeg()
+    if ffmpeg_available:
+        click.echo(f"✓ FFmpeg: {ffmpeg_version}")
+    else:
+        click.echo("✗ FFmpeg: Not found (optional, for video operations)")
+    
+    click.echo("")
 
 
 def main():

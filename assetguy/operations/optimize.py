@@ -269,7 +269,21 @@ def split_gif(
     
     info = gif_asset.get_info()
     if not info:
-        raise ValueError("Could not read GIF information")
+        magick_cmd = get_imagemagick_command()
+        if not magick_cmd:
+            raise RuntimeError(
+                "Could not read GIF information. ImageMagick is required but not found. "
+                "Please install ImageMagick:\n"
+                "  macOS: brew install imagemagick\n"
+                "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
+                "  Windows: Download from https://imagemagick.org/script/download.php"
+            )
+        else:
+            raise ValueError(
+                f"Could not read GIF information. "
+                f"ImageMagick command '{magick_cmd}' is available but failed to read the file. "
+                "The file may be corrupted or in an unsupported format."
+            )
     
     # Sort and validate split points
     split_points = sorted([float(p) for p in split_points])
@@ -427,7 +441,21 @@ def trim_gif(
     
     info = gif_asset.get_info()
     if not info:
-        raise ValueError("Could not read GIF information")
+        magick_cmd = get_imagemagick_command()
+        if not magick_cmd:
+            raise RuntimeError(
+                "Could not read GIF information. ImageMagick is required but not found. "
+                "Please install ImageMagick:\n"
+                "  macOS: brew install imagemagick\n"
+                "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
+                "  Windows: Download from https://imagemagick.org/script/download.php"
+            )
+        else:
+            raise ValueError(
+                f"Could not read GIF information. "
+                f"ImageMagick command '{magick_cmd}' is available but failed to read the file. "
+                "The file may be corrupted or in an unsupported format."
+            )
     
     # Determine frame range from time or frame parameters
     frame_range = None
@@ -630,7 +658,21 @@ def optimize_gif(
     
     info = gif_asset.get_info()
     if not info:
-        raise ValueError("Could not read GIF information")
+        magick_cmd = get_imagemagick_command()
+        if not magick_cmd:
+            raise RuntimeError(
+                "Could not read GIF information. ImageMagick is required but not found. "
+                "Please install ImageMagick:\n"
+                "  macOS: brew install imagemagick\n"
+                "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
+                "  Windows: Download from https://imagemagick.org/script/download.php"
+            )
+        else:
+            raise ValueError(
+                f"Could not read GIF information. "
+                f"ImageMagick command '{magick_cmd}' is available but failed to read the file. "
+                "The file may be corrupted or in an unsupported format."
+            )
     
     input_path = gif_asset.path
     input_size = gif_asset.size_bytes

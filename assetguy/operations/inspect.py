@@ -49,7 +49,24 @@ def inspect_asset(path: Path) -> Dict[str, Any]:
         asset = GifAsset(path)
         info = asset.get_info()
         if not info:
-            raise ValueError(f"Could not read GIF information from {path}")
+            # Check if ImageMagick is available
+            from ..tools.detector import get_imagemagick_command
+            magick_cmd = get_imagemagick_command()
+            if not magick_cmd:
+                raise ValueError(
+                    f"Could not read GIF information from {path}. "
+                    "ImageMagick is required but not found. "
+                    "Please install ImageMagick:\n"
+                    "  macOS: brew install imagemagick\n"
+                    "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
+                    "  Windows: Download from https://imagemagick.org/script/download.php"
+                )
+            else:
+                raise ValueError(
+                    f"Could not read GIF information from {path}. "
+                    f"ImageMagick command '{magick_cmd}' is available but failed to read the file. "
+                    "The file may be corrupted or in an unsupported format."
+                )
         
         return {
             'type': 'gif',

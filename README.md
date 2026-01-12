@@ -15,13 +15,50 @@ Whether you're writing technical docs, maintaining open-source projects, or crea
 
 ## Installation
 
+### Install the Python package
+
 ```bash
 pip install assetguy
 ```
 
+Or for development:
+
+```bash
+git clone https://github.com/youyoubilly/assetguy.git
+cd assetguy
+pip install -e .
+```
+
+### Install system dependencies
+
+**ImageMagick is required for GIF operations.** It must be installed separately as it's a system-level tool, not a Python package:
+
+**macOS:**
+```bash
+brew install imagemagick
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install imagemagick
+```
+
+**Windows:**
+Download and install from [ImageMagick website](https://imagemagick.org/script/download.php)
+
+**Verify installation:**
+```bash
+assetguy check
+```
+
+This will show which dependencies are available.
+
 ## Quick Start
 
 ```bash
+# Check if dependencies are installed
+assetguy check
+
 # Inspect an asset
 assetguy inspect image.jpg
 
@@ -109,6 +146,16 @@ assetguy presets
 - `web` - Optimized for web use (1200px, 12 FPS, 256 colors)
 - `marketing` - High quality for marketing (1920px, 15 FPS, 256 colors)
 
+### `check`
+
+Check availability of required external tools (ImageMagick, FFmpeg).
+
+```bash
+assetguy check
+```
+
+Use this command to verify that system dependencies are installed correctly.
+
 ### `config`
 
 Manage configuration settings.
@@ -128,9 +175,17 @@ assetguy config reset
 
 ## Requirements
 
+### Python Dependencies (installed automatically)
 - Python 3.7+
-- ImageMagick (for GIF operations)
-- Pillow (included)
+- Pillow >= 9.0.0
+- Click >= 7.0
+- PyYAML >= 5.4.0
+
+### System Dependencies (must be installed separately)
+- **ImageMagick** (required for GIF operations) - See [Installation](#installation) above
+- **FFmpeg** (optional, for future video operations)
+
+> **Note:** System dependencies like ImageMagick cannot be installed via `pip`. They must be installed using your system's package manager (brew, apt, etc.) or downloaded as binaries.
 
 ## License
 
