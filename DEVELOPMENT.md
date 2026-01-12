@@ -71,12 +71,14 @@ graph TB
         OPS_INSPECT[inspect.py<br/>Asset type detection & inspection]
         OPS_OPTIMIZE[optimize.py<br/>Optimization operations]
         OPS_COMPARE[compare.py<br/>Before/after comparison]
+        OPS_CONVERT[convert.py<br/>Video conversion operations]
     end
     
     subgraph ASSETS["Asset Layer (assets/)"]
         ASSETS_BASE[base.py<br/>Base Asset class]
         ASSETS_GIF[gif.py<br/>GifAsset]
         ASSETS_IMAGE[image.py<br/>ImageAsset]
+        ASSETS_VIDEO[video.py<br/>VideoAsset]
     end
     
     subgraph TOOLS["Tools Layer (tools/)"]
@@ -97,26 +99,35 @@ graph TB
     CLI_CMD --> OPS_INSPECT
     CLI_CMD --> OPS_OPTIMIZE
     CLI_CMD --> OPS_COMPARE
+    CLI_CMD --> OPS_CONVERT
     CLI_CMD --> CONFIG_MGR
     CLI_CMD --> CONFIG_PRESETS
     
     OPS_INSPECT --> ASSETS_GIF
     OPS_INSPECT --> ASSETS_IMAGE
+    OPS_INSPECT --> ASSETS_VIDEO
     OPS_OPTIMIZE --> ASSETS_GIF
     OPS_OPTIMIZE --> ASSETS_IMAGE
     OPS_COMPARE --> ASSETS_GIF
     OPS_COMPARE --> ASSETS_IMAGE
+    OPS_CONVERT --> ASSETS_VIDEO
     
     ASSETS_GIF --> ASSETS_BASE
     ASSETS_IMAGE --> ASSETS_BASE
+    ASSETS_VIDEO --> ASSETS_BASE
     
     OPS_OPTIMIZE --> TOOLS_DETECT
     OPS_OPTIMIZE --> TOOLS_EXEC
+    OPS_CONVERT --> TOOLS_DETECT
+    OPS_CONVERT --> TOOLS_EXEC
     ASSETS_GIF --> TOOLS_DETECT
     ASSETS_GIF --> TOOLS_EXEC
+    ASSETS_VIDEO --> TOOLS_DETECT
+    ASSETS_VIDEO --> TOOLS_EXEC
     
     OPS_OPTIMIZE --> UTILS_FMT
     OPS_COMPARE --> UTILS_FMT
+    OPS_CONVERT --> UTILS_FMT
     CLI_CMD --> UTILS_PATHS
 ```
 
@@ -164,11 +175,13 @@ sequenceDiagram
 - **`inspect.py`**: Unified asset inspection across all types
 - **`optimize.py`**: Core optimization logic for GIFs and images
 - **`compare.py`**: Before/after comparison utilities
+- **`convert.py`**: Video conversion operations (video to GIF/WebP)
 
 ### `assets/`
 - **`base.py`**: Base `Asset` class with common functionality
 - **`gif.py`**: `GifAsset` class for GIF-specific operations
 - **`image.py`**: `ImageAsset` class for static image operations
+- **`video.py`**: `VideoAsset` class for video-specific operations
 
 ### `tools/`
 - **`detector.py`**: Detects availability of external tools (ImageMagick, FFmpeg)
@@ -190,7 +203,7 @@ AssetGuy relies on external tools and gracefully handles their absence:
 |------|---------|--------------|-----------|
 | ImageMagick | GIF manipulation, inspection | GIF operations | `tools/detector.py` |
 | Pillow | Image processing | Image operations | Python package |
-| FFmpeg | Video processing | Video operations (v0.2) | `tools/detector.py` |
+| FFmpeg | Video processing, conversion | Video operations, video-to-GIF/WebP | `tools/detector.py` |
 
 ## Preset System
 
@@ -214,7 +227,8 @@ Presets are experience-backed policies, not magic. They define:
 1. Create asset class in `assets/` (e.g., `assets/video.py`)
 2. Extend `operations/inspect.py` to detect and handle new type
 3. Add optimization logic in `operations/optimize.py` if needed
-4. Update `cli.py` to support new type in commands
+4. Add conversion logic in `operations/convert.py` if needed
+5. Update `cli.py` to support new type in commands
 
 ### Adding a New Operation
 
@@ -238,6 +252,8 @@ Test files are located in `test-files/` (excluded from git).
 - Image optimization with presets
 - Format detection and inspection
 - Comparison operations
+- Video to GIF conversion
+- Video to WebP animation conversion
 - JSON output format
 
 ## Development Workflow
@@ -251,6 +267,7 @@ Test files are located in `test-files/` (excluded from git).
    ```bash
    python -m assetguy.cli inspect test-files/demo.gif
    python -m assetguy.cli optimize test-files/demo.gif --preset docs
+   python -m assetguy.cli convert test-files/video.mp4 --format webp --width 800 --fps 10 --quality 85
    ```
 
 3. **Check tool availability:**
@@ -280,11 +297,11 @@ When adding features, follow these principles:
 - ✅ Presets
 - ✅ Interactive CLI
 
-**v0.2** (Next)
-- GIF → WebP conversion
-- Video → GIF/WebP
-- Duration trimming
-- FFmpeg integration
+**v0.2** (Current)
+- ✅ Video → GIF conversion
+- ✅ Video → WebP animation conversion
+- ✅ Duration trimming
+- ✅ FFmpeg integration
 
 **v0.3** (Future)
 - Static image compression (pngquant, mozjpeg)

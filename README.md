@@ -31,20 +31,21 @@ pip install -e .
 
 ### Install system dependencies
 
-**ImageMagick is required for GIF operations.** It must be installed separately as it's a system-level tool, not a Python package:
+**ImageMagick and FFmpeg are required for certain operations.** They must be installed separately as they are system-level tools, not Python packages:
 
 **macOS:**
 ```bash
-brew install imagemagick
+brew install imagemagick ffmpeg
 ```
 
 **Ubuntu/Debian:**
 ```bash
-sudo apt-get install imagemagick
+sudo apt-get install imagemagick ffmpeg
 ```
 
 **Windows:**
-Download and install from [ImageMagick website](https://imagemagick.org/script/download.php)
+- ImageMagick: Download from [ImageMagick website](https://imagemagick.org/script/download.php)
+- FFmpeg: Download from [FFmpeg website](https://ffmpeg.org/download.html)
 
 **Verify installation:**
 ```bash
@@ -70,6 +71,9 @@ assetguy optimize logo.png --width 800
 
 # Compare two assets
 assetguy compare original.gif optimized.gif
+
+# Convert video to WebP animation
+assetguy convert video.mp4 --format webp --width 800 --fps 10 --quality 85
 ```
 
 > **Note:** For development documentation, see [DEVELOPMENT.md](DEVELOPMENT.md)
@@ -146,6 +150,44 @@ assetguy presets
 - `web` - Optimized for web use (1200px, 12 FPS, 256 colors)
 - `marketing` - High quality for marketing (1920px, 15 FPS, 256 colors)
 
+### `convert`
+
+Convert video files to GIF or WebP animation format.
+
+```bash
+assetguy convert <file> [OPTIONS]
+```
+
+**Options:**
+- `--format <gif|webp>` - Output format (default: gif)
+- `--width <pixels>` - Target width in pixels
+- `--fps <number>` - Target FPS
+- `--colors <number>` - Number of colors (for GIF)
+- `--quality <0-100>` - Quality setting (for WebP, default: 85)
+- `--start-time <seconds>` - Start time for trimming
+- `--end-time <seconds>` - End time for trimming
+- `--output, -o <path>` - Output file path
+- `--overwrite` - Overwrite existing output file
+- `--non-interactive` - Run without prompts
+- `--json` - Output result in JSON format
+
+**Examples:**
+```bash
+# Convert video to GIF
+assetguy convert video.mp4 --format gif --width 800 --fps 10 --colors 128
+
+# Convert video to WebP animation
+assetguy convert video.mp4 --format webp --width 800 --fps 10 --quality 85
+
+# Convert with time range
+assetguy convert video.mp4 --format webp --start-time 5.0 --end-time 10.0
+
+# Interactive mode (prompts for all settings)
+assetguy convert video.mp4
+```
+
+The command will first inspect the video and display its information, then prompt for conversion settings if running in interactive mode.
+
 ### `check`
 
 Check availability of required external tools (ImageMagick, FFmpeg).
@@ -170,8 +212,10 @@ assetguy config reset
 ## Supported Formats
 
 - **Images:** PNG, JPEG, WebP, GIF, BMP, TIFF
-- **GIFs:** Animated GIFs with frame manipulation
-- **Videos:** Coming soon (v0.2)
+- **GIFs:** Animated GIFs with frame manipulation and optimization
+- **Videos:** MP4, MOV, AVI, and other formats supported by FFmpeg
+  - Convert to GIF animation
+  - Convert to WebP animation (better compression than GIF)
 
 ## Requirements
 
@@ -183,7 +227,7 @@ assetguy config reset
 
 ### System Dependencies (must be installed separately)
 - **ImageMagick** (required for GIF operations) - See [Installation](#installation) above
-- **FFmpeg** (optional, for future video operations)
+- **FFmpeg** (required for video operations) - See [Installation](#installation) above
 
 > **Note:** System dependencies like ImageMagick cannot be installed via `pip`. They must be installed using your system's package manager (brew, apt, etc.) or downloaded as binaries.
 
