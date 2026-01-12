@@ -107,14 +107,14 @@ def print_inspection(info: Dict[str, Any]):
     print(f"File Size: {info['size_formatted']} ({info['size_bytes']:,} bytes)")
     
     if info['type'] == 'gif':
-        print(f"Dimensions: {info['width']} × {info['height']} px")
+        print(f"Dimensions (Width × Height): {info['width']} × {info['height']} px")
         print(f"Frames: {info['frames']}")
         print(f"FPS: {info['fps']:.2f}")
         print(f"Duration: {info['duration']:.2f} seconds")
         print(f"Colors (approx): {info['colors']}")
     
     elif info['type'] == 'image':
-        print(f"Dimensions: {info['width']} × {info['height']} px")
+        print(f"Dimensions (Width × Height): {info['width']} × {info['height']} px")
         print(f"Format: {info['format']}")
         print(f"Mode: {info['mode']}")
     

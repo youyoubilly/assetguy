@@ -194,3 +194,73 @@ class GifAsset(Asset):
         scaled_delays = [max(1, round(delay / scale_factor)) for delay in delays]
         
         return scaled_delays
+    
+    def frame_range_to_time(self, start_frame: int, end_frame: int) -> Optional[Tuple[float, float]]:
+        """Convert frame range to time range.
+        
+        Args:
+            start_frame: Start frame index (0-based)
+            end_frame: End frame index (0-based, inclusive)
+        
+        Returns:
+            Tuple (start_time, end_time) in seconds, or None if invalid
+        """
+        info = self.get_info()
+        if not info:
+            return None
+        
+        delays = info.get('delays', [])
+        total_frames = info.get('frames', 0)
+        
+        if not delays or total_frames == 0:
+            return None
+        
+        # Validate frame range
+        if start_frame < 0 or end_frame >= total_frames or start_frame > end_frame:
+            return None
+        
+        # Calculate start time: sum of delays before start_frame
+        start_time = sum(delays[:start_frame]) / 100.0
+        
+        # Calculate end time: sum of delays up to and including end_frame
+        end_time = sum(delays[:end_frame + 1]) / 100.0
+        
+        return (start_time, end_time)
+    
+    def frames_to_time_points(self, frame_numbers: List[int]) -> List[float]:
+        """Convert frame numbers to time points for splitting.
+        
+        Args:
+            frame_numbers: List of frame indices (0-based)
+        
+        Returns:
+            List of time points in seconds (frame start times)
+        """
+        info = self.get_info()
+        if not info:
+            return []
+        
+        delays = info.get('delays', [])
+        total_frames = info.get('frames', 0)
+        
+        if not delays or total_frames == 0:
+            return []
+        
+        # Build array of frame start times
+        # frame_start_times[i] = time when frame i starts
+        frame_start_times = [0.0]  # Frame 0 starts at 0
+        cumulative = 0.0
+        
+        # Calculate start time for each subsequent frame
+        # Frame i starts after all previous frames' delays
+        for delay in delays[:-1]:  # All but last delay
+            cumulative += delay / 100.0
+            frame_start_times.append(cumulative)
+        
+        # Convert frame numbers to time points
+        time_points = []
+        for frame_num in frame_numbers:
+            if 0 <= frame_num < len(frame_start_times):
+                time_points.append(frame_start_times[frame_num])
+        
+        return time_points
