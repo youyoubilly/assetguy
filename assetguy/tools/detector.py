@@ -71,7 +71,7 @@ def check_ffmpeg() -> Tuple[bool, Optional[str]]:
     Returns:
         Tuple of (is_available, version_string)
     """
-    return check_command("ffmpeg")
+    return check_command("ffmpeg", version_flag="-version")
 
 
 def get_imagemagick_command() -> Optional[str]:

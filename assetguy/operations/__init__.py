@@ -16,6 +16,7 @@ from .optimize import (
     parse_split_times,
     parse_split_trim_input
 )
+from .convert import convert_video_to_gif, print_conversion_result
 
 __all__ = [
     'inspect_asset',
@@ -35,4 +36,6 @@ __all__ = [
     'parse_time_range',
     'parse_split_times',
     'parse_split_trim_input',
+    'convert_video_to_gif',
+    'print_conversion_result',
 ]

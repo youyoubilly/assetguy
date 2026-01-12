@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 
 from ..assets.gif import GifAsset
 from ..assets.image import ImageAsset
+from ..assets.video import VideoAsset
 from ..utils.formatting import format_file_size
 
 
@@ -97,13 +98,40 @@ def inspect_asset(path: Path) -> Dict[str, Any]:
         }
     
     elif asset_type == 'video':
-        # Video inspection will be added in Phase 3
+        asset = VideoAsset(path)
+        info = asset.get_info()
+        if not info:
+            # Check if FFmpeg is available
+            from ..tools.detector import check_ffmpeg
+            ffmpeg_available, _ = check_ffmpeg()
+            if not ffmpeg_available:
+                raise ValueError(
+                    f"Could not read video information from {path}. "
+                    "FFmpeg is required but not found. "
+                    "Please install FFmpeg:\n"
+                    "  macOS: brew install ffmpeg\n"
+                    "  Ubuntu/Debian: sudo apt-get install ffmpeg\n"
+                    "  Windows: Download from https://ffmpeg.org/download.html"
+                )
+            else:
+                raise ValueError(
+                    f"Could not read video information from {path}. "
+                    "FFmpeg is available but failed to read the file. "
+                    "The file may be corrupted or in an unsupported format."
+                )
+        
         return {
             'type': 'video',
             'path': str(path),
-            'size_bytes': path.stat().st_size,
-            'size_formatted': format_file_size(path.stat().st_size),
-            'note': 'Video inspection not yet implemented',
+            'size_bytes': asset.size_bytes,
+            'size_formatted': format_file_size(asset.size_bytes),
+            'width': info['width'],
+            'height': info['height'],
+            'duration': info['duration'],
+            'fps': info['fps'],
+            'codec': info['codec'],
+            'bitrate_kbps': info['bitrate_kbps'],
+            'frame_count': info['frame_count'],
         }
     
     else:
@@ -136,7 +164,11 @@ def print_inspection(info: Dict[str, Any]):
         print(f"Mode: {info['mode']}")
     
     elif info['type'] == 'video':
-        if 'note' in info:
-            print(f"Note: {info['note']}")
+        print(f"Dimensions (Width × Height): {info['width']} × {info['height']} px")
+        print(f"Duration: {info['duration']:.2f} seconds")
+        print(f"FPS: {info['fps']:.2f}")
+        print(f"Codec: {info['codec']}")
+        print(f"Bitrate: {info['bitrate_kbps']:.0f} kbps")
+        print(f"Frames: {info['frame_count']}")
     
     print("=" * 60 + "\n")

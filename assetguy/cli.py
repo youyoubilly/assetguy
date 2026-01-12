@@ -21,9 +21,11 @@ from .operations.optimize import (
     parse_split_times,
     parse_split_trim_input
 )
+from .operations.convert import convert_video_to_gif, print_conversion_result
 from .utils.formatting import format_file_size
 from .assets.gif import GifAsset
 from .assets.image import ImageAsset
+from .assets.video import VideoAsset
 from .config.manager import ConfigManager
 from .config.presets import get_preset, list_presets
 from .utils.paths import strip_quotes
@@ -340,6 +342,156 @@ def optimize(file_path: str, preset: Optional[str], width: Optional[int],
             click.echo(json.dumps(result, indent=2))
         else:
             print_optimization_result(result)
+        
+    except KeyboardInterrupt:
+        click.echo("\nOperation cancelled by user.", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("file_path", type=click.Path(exists=True))
+@click.option("--width", type=int, help="Target width in pixels")
+@click.option("--fps", type=float, help="Target FPS")
+@click.option("--colors", type=int, help="Number of colors")
+@click.option("--start-time", type=float, help="Start time in seconds")
+@click.option("--end-time", type=float, help="End time in seconds")
+@click.option("--output", "-o", type=click.Path(), help="Output file path")
+@click.option("--overwrite", is_flag=True, help="Overwrite output file if it exists (non-interactive mode)")
+@click.option("--non-interactive", is_flag=True, help="Run in non-interactive mode")
+@click.option("--json", is_flag=True, help="Output result in JSON format")
+def convert(file_path: str, width: Optional[int], fps: Optional[float], colors: Optional[int],
+            start_time: Optional[float], end_time: Optional[float], output: Optional[str],
+            overwrite: bool, non_interactive: bool, json: bool):
+    """Convert a video file to GIF format.
+    
+    FILE_PATH: Path to the video file to convert
+    
+    The command will first inspect the video and display its information,
+    then prompt for conversion settings (width, FPS, colors, time range).
+    """
+    try:
+        path = Path(strip_quotes(file_path))
+        
+        if not path.exists():
+            click.echo(f"Error: File not found: {path}", err=True)
+            sys.exit(1)
+        
+        # Detect asset type
+        asset_type = detect_asset_type(path)
+        if asset_type != 'video':
+            click.echo(f"Error: Convert command only supports video files. Got: {asset_type}", err=True)
+            sys.exit(1)
+        
+        # Check FFmpeg availability
+        from .tools.detector import check_ffmpeg
+        ffmpeg_available, _ = check_ffmpeg()
+        if not ffmpeg_available:
+            click.echo(
+                "Error: FFmpeg is required but not found.\n"
+                "Please install FFmpeg:\n"
+                "  macOS: brew install ffmpeg\n"
+                "  Ubuntu/Debian: sudo apt-get install ffmpeg\n"
+                "  Windows: Download from https://ffmpeg.org/download.html",
+                err=True
+            )
+            sys.exit(1)
+        
+        # Show current video info
+        if not non_interactive:
+            click.echo("")
+            info = inspect_asset(path)
+            print_inspection(info)
+        
+        video_asset = VideoAsset(path)
+        video_info = video_asset.get_info()
+        if not video_info:
+            click.echo("Error: Could not read video information", err=True)
+            sys.exit(1)
+        
+        # Handle output path
+        output_path = None
+        if output:
+            output_path = Path(strip_quotes(output))
+        else:
+            stem = path.stem
+            output_path = path.parent / f"{stem}.gif"
+        
+        # Check if output file exists
+        if output_path.exists() and not overwrite:
+            if non_interactive:
+                click.echo(f"Error: Output file exists: {output_path}. Use --overwrite to overwrite.", err=True)
+                sys.exit(1)
+            else:
+                if not click.confirm(f"⚠️ Output file {output_path} already exists. Overwrite?"):
+                    click.echo("Operation cancelled.")
+                    sys.exit(0)
+        
+        # Interactive mode: prompt for missing parameters
+        if not non_interactive:
+            # Time range prompt
+            if start_time is None and end_time is None:
+                time_range_input = click.prompt(
+                    "⏱️  Time range to convert (e.g., 0-10.5, Enter for full video)",
+                    default="",
+                    type=str
+                ).strip()
+                
+                if time_range_input:
+                    if '-' in time_range_input:
+                        parts = time_range_input.split('-')
+                        if len(parts) == 2:
+                            try:
+                                start_time = float(parts[0].strip())
+                                end_time = float(parts[1].strip())
+                                
+                                # Validate
+                                if start_time < 0:
+                                    start_time = 0
+                                if end_time > video_info['duration']:
+                                    end_time = video_info['duration']
+                                if start_time >= end_time:
+                                    click.echo("⚠️  Warning: Invalid time range. Using full video.", err=True)
+                                    start_time = None
+                                    end_time = None
+                            except ValueError:
+                                click.echo("⚠️  Warning: Invalid time format. Using full video.", err=True)
+                                start_time = None
+                                end_time = None
+            
+            if width is None:
+                width_input = click.prompt("📏 Target width (press Enter to keep original)", default="", type=str)
+                width = int(width_input) if width_input.strip() else None
+            
+            if fps is None:
+                fps_input = click.prompt("⏱️ Target FPS [recommended: 8-12] (Enter to keep original)", default="", type=str)
+                fps = float(fps_input) if fps_input.strip() else None
+            
+            if colors is None:
+                colors_input = click.prompt("🎨 Number of colors [recommended: 32/64/128] (Enter to keep)", default="", type=str)
+                colors = int(colors_input) if colors_input.strip() else None
+        
+        # Perform conversion
+        click.echo("\n🔄 Converting video to GIF...")
+        
+        result = convert_video_to_gif(
+            video_asset,
+            output_path=output_path,
+            width=width,
+            fps=fps,
+            colors=colors,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        # Display results
+        if json:
+            import json
+            click.echo(json.dumps(result, indent=2))
+        else:
+            print_conversion_result(result)
         
     except KeyboardInterrupt:
         click.echo("\nOperation cancelled by user.", err=True)
