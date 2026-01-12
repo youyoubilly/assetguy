@@ -21,7 +21,7 @@ from .operations.optimize import (
     parse_split_times,
     parse_split_trim_input
 )
-from .operations.convert import convert_video_to_gif, print_conversion_result
+from .operations.convert import convert_video_to_gif, convert_video_to_webp, print_conversion_result
 from .utils.formatting import format_file_size
 from .assets.gif import GifAsset
 from .assets.image import ImageAsset
@@ -353,24 +353,27 @@ def optimize(file_path: str, preset: Optional[str], width: Optional[int],
 
 @cli.command()
 @click.argument("file_path", type=click.Path(exists=True))
+@click.option("--format", type=click.Choice(["gif", "webp"]), default="gif", help="Output format (gif or webp)")
 @click.option("--width", type=int, help="Target width in pixels")
 @click.option("--fps", type=float, help="Target FPS")
-@click.option("--colors", type=int, help="Number of colors")
+@click.option("--colors", type=int, help="Number of colors (for GIF)")
+@click.option("--quality", type=int, help="Quality 0-100 (for WebP)")
 @click.option("--start-time", type=float, help="Start time in seconds")
 @click.option("--end-time", type=float, help="End time in seconds")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.option("--overwrite", is_flag=True, help="Overwrite output file if it exists (non-interactive mode)")
 @click.option("--non-interactive", is_flag=True, help="Run in non-interactive mode")
 @click.option("--json", is_flag=True, help="Output result in JSON format")
-def convert(file_path: str, width: Optional[int], fps: Optional[float], colors: Optional[int],
-            start_time: Optional[float], end_time: Optional[float], output: Optional[str],
-            overwrite: bool, non_interactive: bool, json: bool):
-    """Convert a video file to GIF format.
+def convert(file_path: str, format: str, width: Optional[int], fps: Optional[float], 
+            colors: Optional[int], quality: Optional[int], start_time: Optional[float], 
+            end_time: Optional[float], output: Optional[str], overwrite: bool, 
+            non_interactive: bool, json: bool):
+    """Convert a video file to GIF or WebP animation format.
     
     FILE_PATH: Path to the video file to convert
     
     The command will first inspect the video and display its information,
-    then prompt for conversion settings (width, FPS, colors, time range).
+    then prompt for conversion settings (format, width, FPS, colors/quality, time range).
     """
     try:
         path = Path(strip_quotes(file_path))
@@ -411,13 +414,20 @@ def convert(file_path: str, width: Optional[int], fps: Optional[float], colors: 
             click.echo("Error: Could not read video information", err=True)
             sys.exit(1)
         
-        # Handle output path
-        output_path = None
+        # Determine output format (from option or file extension)
+        output_format = format.lower()
         if output:
             output_path = Path(strip_quotes(output))
+            # Detect format from extension if not specified
+            if output_path.suffix.lower() == '.webp':
+                output_format = 'webp'
+            elif output_path.suffix.lower() == '.gif':
+                output_format = 'gif'
         else:
+            # Generate output path based on format
             stem = path.stem
-            output_path = path.parent / f"{stem}.gif"
+            ext = '.webp' if output_format == 'webp' else '.gif'
+            output_path = path.parent / f"{stem}{ext}"
         
         # Check if output file exists
         if output_path.exists() and not overwrite:
@@ -431,6 +441,27 @@ def convert(file_path: str, width: Optional[int], fps: Optional[float], colors: 
         
         # Interactive mode: prompt for missing parameters
         if not non_interactive:
+            # Format selection prompt (only if format wasn't set via CLI and output path doesn't indicate format)
+            if format == 'gif' and (not output or output_path.suffix.lower() not in ['.webp', '.gif']):
+                format_input = click.prompt(
+                    "🎬 Output format: GIF or WebP? (g/w, default: gif)",
+                    default="g",
+                    type=str
+                ).strip().lower()
+                
+                if format_input in ['w', 'webp']:
+                    output_format = 'webp'
+                    # Update output path extension if not explicitly set
+                    if not output:
+                        stem = path.stem
+                        output_path = path.parent / f"{stem}.webp"
+                else:
+                    output_format = 'gif'
+                    # Update output path extension if not explicitly set
+                    if not output:
+                        stem = path.stem
+                        output_path = path.parent / f"{stem}.gif"
+            
             # Time range prompt
             if start_time is None and end_time is None:
                 time_range_input = click.prompt(
@@ -469,22 +500,41 @@ def convert(file_path: str, width: Optional[int], fps: Optional[float], colors: 
                 fps_input = click.prompt("⏱️ Target FPS [recommended: 8-12] (Enter to keep original)", default="", type=str)
                 fps = float(fps_input) if fps_input.strip() else None
             
-            if colors is None:
-                colors_input = click.prompt("🎨 Number of colors [recommended: 32/64/128] (Enter to keep)", default="", type=str)
-                colors = int(colors_input) if colors_input.strip() else None
+            # Format-specific prompts
+            if output_format == 'gif':
+                if colors is None:
+                    colors_input = click.prompt("🎨 Number of colors [recommended: 32/64/128] (Enter to keep)", default="", type=str)
+                    colors = int(colors_input) if colors_input.strip() else None
+            else:  # WebP
+                if quality is None:
+                    quality_input = click.prompt("🎨 Quality [recommended: 75-90, default: 85] (Enter for default)", default="85", type=str)
+                    quality = int(quality_input) if quality_input.strip() else 85
+                    # Validate quality range
+                    quality = max(0, min(100, quality))
         
         # Perform conversion
-        click.echo("\n🔄 Converting video to GIF...")
+        click.echo(f"\n🔄 Converting video to {output_format.upper()}...")
         
-        result = convert_video_to_gif(
-            video_asset,
-            output_path=output_path,
-            width=width,
-            fps=fps,
-            colors=colors,
-            start_time=start_time,
-            end_time=end_time
-        )
+        if output_format == 'webp':
+            result = convert_video_to_webp(
+                video_asset,
+                output_path=output_path,
+                width=width,
+                fps=fps,
+                quality=quality,
+                start_time=start_time,
+                end_time=end_time
+            )
+        else:  # GIF
+            result = convert_video_to_gif(
+                video_asset,
+                output_path=output_path,
+                width=width,
+                fps=fps,
+                colors=colors,
+                start_time=start_time,
+                end_time=end_time
+            )
         
         # Display results
         if json:
