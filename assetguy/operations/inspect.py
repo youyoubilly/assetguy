@@ -109,8 +109,20 @@ def inspect_asset(path: Path) -> Dict[str, Any]:
                     'note': 'FFmpeg required for full animated WebP metadata'
                 }
             
-            # Get animated WebP metadata using ffprobe
+            # Get animated WebP metadata using ffprobe and PIL
             try:
+                # First, use PIL to count frames
+                from PIL import Image
+                frame_count = 0
+                with Image.open(path) as img:
+                    while True:
+                        try:
+                            img.seek(frame_count)
+                            frame_count += 1
+                        except EOFError:
+                            break  # Reached end of frames
+                
+                # Try to get FPS and duration from ffprobe
                 result = subprocess.run(
                     [
                         "ffprobe",
@@ -134,6 +146,9 @@ def inspect_asset(path: Path) -> Dict[str, Any]:
                         video_stream = stream
                         break
                 
+                fps = 0
+                duration = 0
+                
                 if video_stream:
                     # Extract FPS
                     fps_str = video_stream.get("r_frame_rate", "0/1")
@@ -143,28 +158,38 @@ def inspect_asset(path: Path) -> Dict[str, Any]:
                     else:
                         fps = float(fps_str) if fps_str else 0
                     
-                    # Extract duration
-                    duration = float(data.get("format", {}).get("duration", 0))
-                    
-                    # Get frame count if available
-                    frame_count = int(video_stream.get("nb_frames", 0))
+                    # Try to get duration from stream first, then format
+                    duration = float(video_stream.get("duration", 0))
+                    if duration == 0:
+                        duration = float(data.get("format", {}).get("duration", 0))
+                
+                # If duration is still 0 but we have frame count and FPS, calculate it
+                if duration == 0 and frame_count > 0 and fps > 0:
+                    duration = frame_count / fps
+                # If FPS is 0 but we have duration and frame count, calculate FPS
+                elif fps == 0 and frame_count > 0 and duration > 0:
+                    fps = frame_count / duration
+                # If both are 0, try to get frame count from ffprobe
+                elif frame_count == 0:
+                    if video_stream:
+                        frame_count = int(video_stream.get("nb_frames", 0))
                     if frame_count == 0 and fps > 0 and duration > 0:
                         frame_count = int(fps * duration)
-                    
-                    return {
-                        'type': 'image',
-                        'path': str(path),
-                        'size_bytes': asset.size_bytes,
-                        'size_formatted': format_file_size(asset.size_bytes),
-                        'width': info['width'],
-                        'height': info['height'],
-                        'format': info['format'],
-                        'mode': info['mode'],
-                        'is_animated': True,
-                        'frames': frame_count,
-                        'fps': fps,
-                        'duration': duration,
-                    }
+                
+                return {
+                    'type': 'image',
+                    'path': str(path),
+                    'size_bytes': asset.size_bytes,
+                    'size_formatted': format_file_size(asset.size_bytes),
+                    'width': info['width'],
+                    'height': info['height'],
+                    'format': info['format'],
+                    'mode': info['mode'],
+                    'is_animated': True,
+                    'frames': frame_count,
+                    'fps': fps,
+                    'duration': duration,
+                }
             except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, ValueError):
                 # If ffprobe fails, return basic info with animation flag
                 return {
