@@ -1,13 +1,14 @@
 """Asset optimization operations."""
 
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
 from ..assets.gif import GifAsset
 from ..assets.image import ImageAsset
-from ..tools.detector import get_imagemagick_command
+from ..tools.detector import get_imagemagick_command, check_ffmpeg
 from ..tools.executor import run
 from ..utils.formatting import filesize_mb, format_file_size
 
@@ -744,6 +745,114 @@ def optimize_gif(
         raise
 
 
+def optimize_animated_webp(
+    image_asset: ImageAsset,
+    output_path: Optional[Path] = None,
+    width: Optional[int] = None,
+    fps: Optional[float] = None,
+    quality: Optional[int] = None
+) -> Dict[str, Any]:
+    """Optimize an animated WebP file with resize, FPS adjustment, and quality settings.
+    
+    Uses ImageMagick for optimization (similar to GIF optimization) since it handles
+    animated WebP files more reliably than FFmpeg.
+    
+    Args:
+        image_asset: ImageAsset instance (must be animated WebP)
+        output_path: Optional output path (default: generate from input)
+        width: Optional target width in pixels
+        fps: Optional target FPS
+        quality: Optional quality setting (0-100, default: 85)
+        
+    Returns:
+        Dictionary with optimization results (from format_optimization_result)
+        
+    Raises:
+        RuntimeError: If ImageMagick not found
+        ValueError: If WebP is not animated or parameters are invalid
+    """
+    magick_cmd = get_imagemagick_command()
+    if not magick_cmd:
+        raise RuntimeError(
+            "ImageMagick not found. ImageMagick is required for optimizing animated WebP files. "
+            "Please install ImageMagick:\n"
+            "  macOS: brew install imagemagick\n"
+            "  Ubuntu/Debian: sudo apt-get install imagemagick\n"
+            "  Windows: Download from https://imagemagick.org/script/download.php"
+        )
+    
+    # Verify it's an animated WebP
+    if not image_asset.is_animated_webp():
+        raise ValueError("File is not an animated WebP. Use optimize_image() for static WebP files.")
+    
+    input_path = image_asset.path
+    input_size = image_asset.size_bytes
+    
+    # Generate output path if not provided
+    if output_path is None:
+        output_path = generate_output_filename(input_path)
+    
+    # Validate quality (ImageMagick uses 0-100 for WebP quality)
+    if quality is None:
+        quality = 85  # Default quality
+    else:
+        quality = max(0, min(100, quality))  # Clamp to 0-100
+    
+    # Use temp file for processing
+    temp_fd, temp_file = tempfile.mkstemp(suffix='.webp', prefix='webp_optimize_')
+    os.close(temp_fd)
+    
+    try:
+        # Build ImageMagick command
+        opt_cmd = [magick_cmd, str(input_path)]
+        
+        # Coalesce frames before any modifications (important for animated WebP)
+        opt_cmd += ["-coalesce"]
+        
+        # Add resize if specified
+        if width:
+            opt_cmd += ["-resize", f"{width}x"]
+        
+        # Add FPS adjustment if specified
+        if fps:
+            # Calculate delay in centiseconds (100/fps)
+            delay = int(100 / fps)
+            opt_cmd += ["-set", "delay", str(delay)]
+        
+        # Define WebP output format and optimization
+        opt_cmd += ["-define", "webp:lossless=false"]  # Use lossy encoding
+        opt_cmd += ["-quality", str(quality)]  # Quality setting (0-100)
+        opt_cmd += ["-layers", "optimize"]  # Optimize animation layers
+        
+        # Output to temp file (ImageMagick will detect .webp extension)
+        opt_cmd.append(temp_file)
+        
+        # Run ImageMagick optimization
+        run(opt_cmd)
+        
+        # Move temp file to output path
+        if os.path.exists(temp_file):
+            os.rename(temp_file, output_path)
+        else:
+            raise RuntimeError("ImageMagick optimization failed: output file not created")
+        
+        # Get output file size
+        output_size = output_path.stat().st_size
+        
+        # Format and return result
+        result = format_optimization_result(input_path, output_path, input_size, output_size)
+        return result
+        
+    except Exception as e:
+        # Clean up temp file on error
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+        raise
+
+
 def optimize_image(
     image_asset: ImageAsset,
     output_path: Optional[Path] = None,
@@ -752,6 +861,9 @@ def optimize_image(
     scale: Optional[float] = None
 ) -> Dict[str, Any]:
     """Optimize an image file with proportional resizing.
+    
+    For animated WebP files, this function will delegate to optimize_animated_webp().
+    For static images, it uses PIL for optimization.
     
     Args:
         image_asset: ImageAsset instance
@@ -767,6 +879,34 @@ def optimize_image(
         ValueError: If no resize parameter provided or image cannot be read
     """
     from PIL import Image
+    
+    # Check if this is an animated WebP - if so, delegate to optimize_animated_webp
+    if image_asset.path.suffix.lower() == '.webp' and image_asset.is_animated_webp():
+        # For animated WebP, we need to use optimize_animated_webp
+        # Note: animated WebP optimization doesn't support height/scale, only width
+        # We'll convert scale/height to width if needed
+        if scale:
+            info = image_asset.get_info()
+            if info:
+                width = int(info['width'] * scale)
+        elif height:
+            info = image_asset.get_info()
+            if info:
+                # Calculate proportional width
+                scale_factor = height / info['height']
+                width = int(info['width'] * scale_factor)
+        
+        # If no width specified, we can't optimize animated WebP
+        if not width:
+            raise ValueError("Width parameter is required for optimizing animated WebP files")
+        
+        # Delegate to animated WebP optimization
+        return optimize_animated_webp(
+            image_asset,
+            output_path=output_path,
+            width=width,
+            quality=85  # Default quality for animated WebP
+        )
     
     input_path = image_asset.path
     input_size = image_asset.size_bytes
@@ -810,6 +950,7 @@ def optimize_image(
             elif img.format == 'PNG':
                 save_kwargs['optimize'] = True
             elif img.format == 'WEBP':
+                # Static WebP optimization
                 save_kwargs['quality'] = 85
                 save_kwargs['method'] = 6
             

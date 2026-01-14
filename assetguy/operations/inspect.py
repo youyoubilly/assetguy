@@ -1,5 +1,7 @@
 """Unified asset inspection operations."""
 
+import json
+import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -86,6 +88,97 @@ def inspect_asset(path: Path) -> Dict[str, Any]:
         asset = ImageAsset(path)
         info = asset.get_info()
         
+        # Check if this is an animated WebP
+        if path.suffix.lower() == '.webp' and asset.is_animated_webp():
+            # Use ffprobe to get animation metadata
+            from ..tools.detector import check_ffmpeg
+            ffmpeg_available, _ = check_ffmpeg()
+            
+            if not ffmpeg_available:
+                # Fallback to basic image info if FFmpeg not available
+                return {
+                    'type': 'image',
+                    'path': str(path),
+                    'size_bytes': asset.size_bytes,
+                    'size_formatted': format_file_size(asset.size_bytes),
+                    'width': info['width'],
+                    'height': info['height'],
+                    'format': info['format'],
+                    'mode': info['mode'],
+                    'is_animated': True,
+                    'note': 'FFmpeg required for full animated WebP metadata'
+                }
+            
+            # Get animated WebP metadata using ffprobe
+            try:
+                result = subprocess.run(
+                    [
+                        "ffprobe",
+                        "-v", "quiet",
+                        "-print_format", "json",
+                        "-show_format",
+                        "-show_streams",
+                        str(path)
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                
+                data = json.loads(result.stdout)
+                
+                # Find video stream
+                video_stream = None
+                for stream in data.get("streams", []):
+                    if stream.get("codec_type") == "video":
+                        video_stream = stream
+                        break
+                
+                if video_stream:
+                    # Extract FPS
+                    fps_str = video_stream.get("r_frame_rate", "0/1")
+                    if "/" in fps_str:
+                        num, den = map(int, fps_str.split("/"))
+                        fps = num / den if den > 0 else 0
+                    else:
+                        fps = float(fps_str) if fps_str else 0
+                    
+                    # Extract duration
+                    duration = float(data.get("format", {}).get("duration", 0))
+                    
+                    # Get frame count if available
+                    frame_count = int(video_stream.get("nb_frames", 0))
+                    if frame_count == 0 and fps > 0 and duration > 0:
+                        frame_count = int(fps * duration)
+                    
+                    return {
+                        'type': 'image',
+                        'path': str(path),
+                        'size_bytes': asset.size_bytes,
+                        'size_formatted': format_file_size(asset.size_bytes),
+                        'width': info['width'],
+                        'height': info['height'],
+                        'format': info['format'],
+                        'mode': info['mode'],
+                        'is_animated': True,
+                        'frames': frame_count,
+                        'fps': fps,
+                        'duration': duration,
+                    }
+            except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, ValueError):
+                # If ffprobe fails, return basic info with animation flag
+                return {
+                    'type': 'image',
+                    'path': str(path),
+                    'size_bytes': asset.size_bytes,
+                    'size_formatted': format_file_size(asset.size_bytes),
+                    'width': info['width'],
+                    'height': info['height'],
+                    'format': info['format'],
+                    'mode': info['mode'],
+                    'is_animated': True,
+                }
+        
         return {
             'type': 'image',
             'path': str(path),
@@ -162,6 +255,16 @@ def print_inspection(info: Dict[str, Any]):
         print(f"Dimensions (Width × Height): {info['width']} × {info['height']} px")
         print(f"Format: {info['format']}")
         print(f"Mode: {info['mode']}")
+        if info.get('is_animated'):
+            print(f"Animated: Yes")
+            if 'frames' in info:
+                print(f"Frames: {info['frames']}")
+            if 'fps' in info:
+                print(f"FPS: {info['fps']:.2f}")
+            if 'duration' in info:
+                print(f"Duration: {info['duration']:.2f} seconds")
+            if 'note' in info:
+                print(f"Note: {info['note']}")
     
     elif info['type'] == 'video':
         print(f"Dimensions (Width × Height): {info['width']} × {info['height']} px")

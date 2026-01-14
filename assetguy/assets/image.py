@@ -22,6 +22,7 @@ class ImageAsset(Asset):
         """
         super().__init__(path)
         self._info: Optional[Dict[str, Any]] = None
+        self._is_animated_webp: Optional[bool] = None
     
     @classmethod
     def find_all(cls, directory: Path) -> List['ImageAsset']:
@@ -75,3 +76,35 @@ class ImageAsset(Asset):
             True if format is supported
         """
         return self.path.suffix.lower() in self.SUPPORTED_FORMATS
+    
+    def is_animated_webp(self) -> bool:
+        """Check if WebP file is animated.
+        
+        Returns:
+            True if WebP file is animated, False otherwise
+        """
+        if self._is_animated_webp is not None:
+            return self._is_animated_webp
+        
+        if self.path.suffix.lower() != '.webp':
+            self._is_animated_webp = False
+            return False
+        
+        try:
+            with Image.open(self.path) as img:
+                # PIL's Image object has is_animated attribute for WebP
+                if hasattr(img, 'is_animated'):
+                    self._is_animated_webp = img.is_animated
+                    return self._is_animated_webp
+                
+                # Fallback: try to seek to frame 1
+                try:
+                    img.seek(1)
+                    self._is_animated_webp = True
+                    return True
+                except EOFError:
+                    self._is_animated_webp = False
+                    return False
+        except Exception:
+            self._is_animated_webp = False
+            return False

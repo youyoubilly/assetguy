@@ -90,21 +90,23 @@ def compare(file1: str, file2: str, json: bool):
 @click.argument("file_path", type=click.Path(exists=True))
 @click.option("--preset", type=click.Choice(["docs", "web", "marketing"]), help="Use a preset configuration")
 @click.option("--width", type=int, help="Target width in pixels")
-@click.option("--fps", type=float, help="Target FPS (for GIFs)")
+@click.option("--fps", type=float, help="Target FPS (for GIFs and animated WebP)")
 @click.option("--colors", type=int, help="Number of colors (for GIFs)")
+@click.option("--quality", type=int, help="Quality 0-100 (for animated WebP)")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.option("--overwrite", is_flag=True, help="Overwrite output file if it exists (non-interactive mode)")
 @click.option("--non-interactive", is_flag=True, help="Run in non-interactive mode")
 @click.option("--json", is_flag=True, help="Output result in JSON format")
 def optimize(file_path: str, preset: Optional[str], width: Optional[int], 
-             fps: Optional[float], colors: Optional[int], output: Optional[str],
-             overwrite: bool, non_interactive: bool, json: bool):
+             fps: Optional[float], colors: Optional[int], quality: Optional[int],
+             output: Optional[str], overwrite: bool, non_interactive: bool, json: bool):
     """Optimize an asset file (GIF or image).
     
     FILE_PATH: Path to the asset file to optimize
     
     Supports both GIF and image optimization with presets, interactive prompts,
-    and non-interactive mode for automation.
+    and non-interactive mode for automation. Animated WebP files are supported
+    with fps and quality parameters.
     """
     try:
         path = Path(strip_quotes(file_path))
@@ -132,6 +134,13 @@ def optimize(file_path: str, preset: Optional[str], width: Optional[int],
         opt_width = width if width is not None else preset_config.get('width')
         opt_fps = fps if fps is not None else preset_config.get('fps')
         opt_colors = colors if colors is not None else preset_config.get('colors')
+        opt_quality = quality if quality is not None else preset_config.get('quality')
+        
+        # Check if this is an animated WebP
+        is_animated_webp = False
+        if asset_type == 'image' and path.suffix.lower() == '.webp':
+            image_asset_temp = ImageAsset(path)
+            is_animated_webp = image_asset_temp.is_animated_webp()
         
         # Show current asset info
         if not non_interactive:
@@ -292,9 +301,26 @@ def optimize(file_path: str, preset: Optional[str], width: Optional[int],
                     output_path = Path(output_input)
             
             elif asset_type == 'image':
-                if opt_width is None:
-                    width_input = click.prompt("📏 Target width (press Enter to skip)", default="", type=str)
-                    opt_width = int(width_input) if width_input.strip() else None
+                # Check if animated WebP
+                if is_animated_webp:
+                    if opt_width is None:
+                        width_input = click.prompt("📏 Target width (press Enter to skip)", default="", type=str)
+                        opt_width = int(width_input) if width_input.strip() else None
+                    
+                    if opt_fps is None:
+                        fps_input = click.prompt("⏱️ Target FPS [recommended: 8-12] (Enter to skip)", default="", type=str)
+                        opt_fps = float(fps_input) if fps_input.strip() else None
+                    
+                    if opt_quality is None:
+                        quality_input = click.prompt("🎨 Quality [recommended: 75-90, default: 85] (Enter for default)", default="85", type=str)
+                        opt_quality = int(quality_input) if quality_input.strip() else 85
+                        # Validate quality range
+                        opt_quality = max(0, min(100, opt_quality))
+                else:
+                    # Static image
+                    if opt_width is None:
+                        width_input = click.prompt("📏 Target width (press Enter to skip)", default="", type=str)
+                        opt_width = int(width_input) if width_input.strip() else None
                 
                 # Prompt for output filename if not provided
                 if not output:
@@ -308,9 +334,16 @@ def optimize(file_path: str, preset: Optional[str], width: Optional[int],
                 click.echo("Error: At least one optimization parameter (--width, --fps, or --colors) or --preset must be provided.", err=True)
                 sys.exit(1)
         elif asset_type == 'image':
-            if opt_width is None:
-                click.echo("Error: --width or --preset must be provided for image optimization.", err=True)
-                sys.exit(1)
+            if is_animated_webp:
+                # For animated WebP, require width (fps and quality are optional)
+                if opt_width is None:
+                    click.echo("Error: --width or --preset must be provided for animated WebP optimization.", err=True)
+                    sys.exit(1)
+            else:
+                # For static images, require width
+                if opt_width is None:
+                    click.echo("Error: --width or --preset must be provided for image optimization.", err=True)
+                    sys.exit(1)
         
         # Perform optimization
         click.echo("\n🔄 Optimizing asset...")
@@ -327,11 +360,23 @@ def optimize(file_path: str, preset: Optional[str], width: Optional[int],
             )
         elif asset_type == 'image':
             image_asset = ImageAsset(path)
-            result = optimize_image(
-                image_asset,
-                output_path=output_path,
-                width=opt_width
-            )
+            if is_animated_webp:
+                # Use optimize_animated_webp for animated WebP
+                from .operations.optimize import optimize_animated_webp
+                result = optimize_animated_webp(
+                    image_asset,
+                    output_path=output_path,
+                    width=opt_width,
+                    fps=opt_fps,
+                    quality=opt_quality
+                )
+            else:
+                # Use optimize_image for static images
+                result = optimize_image(
+                    image_asset,
+                    output_path=output_path,
+                    width=opt_width
+                )
         else:
             click.echo(f"Error: Unsupported asset type: {asset_type}", err=True)
             sys.exit(1)
